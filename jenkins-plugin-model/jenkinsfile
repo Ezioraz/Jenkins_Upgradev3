@@ -1,34 +1,37 @@
 pipeline {
     agent any
+
+    environment {
+        DOTNET_ROOT = "${env.HOME}/.dotnet"
+        PATH = "${env.HOME}/.dotnet:${env.HOME}/.dotnet/tools:${env.PATH}"
+    }
+
     stages {
+
         stage('Verify Shell Environment') {
             steps {
-                script {
-                    // Get the job name and build number
-                    def jobName = env.JOB_NAME
-                    def buildNumber = env.BUILD_NUMBER
+                echo "Job Name: ${env.JOB_NAME}"
+                echo "Build Number: ${env.BUILD_NUMBER}"
+                
+                // Docker version
+                sh 'docker --version'
 
-                    // Print the job name and build number
-                    echo "Job Name: $jobName"
-                    echo "Build Number: $buildNumber"
-
-                    // Use them in shell commands
-                    sh 'sudo docker --version'
-                    sh 'sudo dotnet --info'
-                }
+                // .NET version
+                sh 'dotnet --info'
             }
         }
 
         stage('Checkout Jenkins Upgrade3 Git Repository') {
             steps {
                 script {
-                    // Clone the Git repository's master branch
-                    def gitRepoUrl = 'https://github.com/Ezioraz/Jenkins_Upgradev3.git'
-
-                    checkout([$class: 'GitSCM', 
-                        branches: [[name: '*/master']], 
-                        userRemoteConfigs: [[url: gitRepoUrl]], 
-                        extensions: [[$class: 'CleanBeforeCheckout'], [$class: 'CloneOption', noTags: false, shallow: true, depth: 1]]
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/master']],
+                        userRemoteConfigs: [[url: 'https://github.com/Ezioraz/Jenkins_Upgradev3.git']],
+                        extensions: [
+                            [$class: 'CleanBeforeCheckout'],
+                            [$class: 'CloneOption', noTags: false, shallow: true, depth: 1]
+                        ]
                     ])
                 }
             }
@@ -43,28 +46,24 @@ pipeline {
         stage('Unit Test') {
             steps {
                 sh 'chmod +x ./jenkins-plugin-model/ci/03-unit-test.sh && ./jenkins-plugin-model/ci/03-unit-test.sh'
-                mstest testResultsFile:"**/*.trx"
+                
+                // MSTest step (ensure the plugin and agent tools are configured)
+                mstest testResultsFile: "**/*.trx"
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                script {
-                    // Get the job name and build number
-                    def jobName = env.JOB_NAME
-                    def buildNumber = env.BUILD_NUMBER
-
-                    // Print the job name and build number
-                    echo "Job Name: $jobName"
-                    echo "Build Number: $buildNumber"
-                
-                withCredentials([usernamePassword(credentialsId: '45cf2a67-c654-4425-a8c2-c1f65a4cb664', usernameVariable: 'DOCKER_HUB_USER', passwordVariable: 'DOCKER_HUB_PASSWORD')]) {                      
-                    sh "chmod +x ./jenkins-plugin-model/ci/04-push.sh"
-                    sh "./jenkins-plugin-model/ci/04-push.sh $buildNumber"
+                withCredentials([usernamePassword(
+                    credentialsId: '45cf2a67-c654-4425-a8c2-c1f65a4cb664', 
+                    usernameVariable: 'DOCKER_HUB_USER', 
+                    passwordVariable: 'DOCKER_HUB_PASSWORD'
+                )]) {
+                    sh 'chmod +x ./jenkins-plugin-model/ci/04-push.sh'
+                    sh "./jenkins-plugin-model/ci/04-push.sh ${env.BUILD_NUMBER}"
                 }
-                echo "Build Completed - Job Name: $jobName  --  Build Number: $buildNumber"
+                echo "Build Completed - Job Name: ${env.JOB_NAME}  --  Build Number: ${env.BUILD_NUMBER}"
             }
         }
     }
-}
 }
